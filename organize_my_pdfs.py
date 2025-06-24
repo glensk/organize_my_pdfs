@@ -137,9 +137,19 @@ def extract_re_from_line(get_value,line):
     if match:
         # Extract just the [0-9][0-9].20[0-9][0-9] part
         # found = re.search(r'[0-9][0-9]\.20[0-9][0-9]', line).group()
-        found = re.search(get_value, line).group()
+        text = re.search(get_value, line).group()
+        print('>>text   :',text)  # Output: 12.2024
+        text2 = text.replace(' ', '_')
+        print('>>text2  :',text2)  # Output: 12.2024
         
-        # print('found',found)  # Output: 12.2024
+        def clean_string(text):
+            # Keep letters, numbers, and dots; remove everything else
+            # return re.sub(r'[^a-zA-Z0-9.]', '', text)
+            return re.sub(r'[^a-zA-Z0-9._]', '', text)
+        found = clean_string(text2)
+        print('>>found  :',found)  # Output: 12.2024
+
+        
         return found
     else:
         # print("No match found")
@@ -169,12 +179,17 @@ def phrases_get():
     phrases = { 'APEMS_bill_L_J'  : { 'search'  : [ 'APEMS', 'Corminjoz', 'Prestations pour', 'Glensk', 'Laura','Jakob', 'Montant CHF', 'Factur' , 'Facturation' ],
                                         'get_all' : [{'Facturation': r'[0-9][0-9]\.(20[0-9][0-9]|[0-9][0-9])', 'replace': False}],
                                         'filename': 'Rechnung_<Facturation>_Jakob_und_Laura.pdf',
-                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/APEMS_Jakob_Laura/2024/',
+                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/APEMS_Jakob_Laura/2025/',
                                     },
-                'APEMS_bill_S_E'   : { 'search'  : [ 'Sorbiers', 'Prestations pour', 'Glensk', 'Simon','Emil', 'Montant CHF', 'Factur' , 'Facturation' ],
+                'Sorbier_bill_S_E'   : { 'search'  : [ 'Sorbiers', 'Prestations pour', 'Glensk', 'Simon','Emil', 'Montant CHF', 'Factur' , 'Facturation' ],
                                         'get_all' : [{'Facturation': r'[0-9][0-9]\.(20[0-9][0-9]|[0-9][0-9])', 'replace': False}],
                                         'filename': 'Rechnung_<Facturation>_Simon_und_Emil.pdf',
-                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/Sorbier_Simon_Emil/2024/',
+                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/Simon_Emil_Sorbier/2025/',
+                                    },
+                'Sorbier_contrat_S_E'   : { 'search'  : [ 'Sorbiers', 'Contrat', 'Glensk','Emil','Signatures'],
+                                        'get_all' : [{'Contrat': r'.*du.*au.*', 'replace': False}],
+                                        'filename': 'Vertrag_<Contratt>_Simon_und_Emil.pdf',
+                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/Simon_Emil_Sorbier/2025/',
                                     },
                                       
                 # 'APEMS_contract'    : {'search'   : [ 'APEMS', 'Corminjoz', 'Contrat' ],
@@ -377,6 +392,9 @@ def process_pdfs(directory):
                         if verbose:
                             print("?? file_path_new",file_path_new)
                         printred(' '*36,file_path,'->',file_path_new)
+                        pprint.pprint(phrases)
+                        
+                        sys.exit('a-0sd')
                         if os.path.isfile(file_path_new):
                             print('??file_path_new',file_path_new,'does already exist!')
                             sys.exit("path does exist already!")
