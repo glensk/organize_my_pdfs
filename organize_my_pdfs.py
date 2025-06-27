@@ -7,7 +7,18 @@ import re
 import sys
 import pprint
 import shutil
+import argparse
 
+
+def help(p = None):
+    string = ''' helptext '''
+    p = argparse.ArgumentParser(description=string,
+            formatter_class=argparse.RawTextHelpFormatter)
+    #p.add_argument('-i','--input_file', required=True, type=str,default=False, help="path to the input_file")
+    p.add_argument('-f',      '--file', help='path to the input file', action='store', default=False)
+    p.add_argument('-v',       '--verbose', help='verbose', action='count', default=False)
+    p.add_argument('-d',       '--debug', help="Enable debug logging.", action='store_true')
+    return p
 # from isort import file
 # from pytz import NonExistentTimeError
 
@@ -128,28 +139,45 @@ def is_orc_pdf(file_path):
         # print("YES, it is OCR'd")
         return True,text
 
-def extract_re_from_line(get_value,line):
+def extract_re_from_line(get_value,line,args):
     # Extract the month.year part
     match = re.search(get_value, line)
-    print('>>line     :'+line+":")
-    print('>>get_value:'+get_value+":")
-    print('>>match    :',match)
+    if args.verbose:
+        printblue('>>line     :',line)
+    
+    if args.verbose:
+        printblue('>>get_value:',get_value)
+        printblue('>>match    :',match)
     if match:
         # Extract just the [0-9][0-9].20[0-9][0-9] part
         # found = re.search(r'[0-9][0-9]\.20[0-9][0-9]', line).group()
         text = re.search(get_value, line).group()
-        print('>>text   :',text)  # Output: 12.2024
+        if args.verbose:
+            print('>>text     :',text)
         text2 = text.replace(' ', '_')
-        print('>>text2  :',text2)  # Output: 12.2024
+        if args.verbose:
+            print('>>text2  :',text2)  # Output: 12.2024
+        text3 = text2.replace('.', '_')
+        if args.verbose:
+            print('>>text3  :',text3)  # Output: 12_2024
+        # Replace __
         
+        text4 = text3.replace('__', '_')
+        if args.verbose:
+            print('>>text4  :',text4)  # Output: 12_
+
         def clean_string(text):
             # Keep letters, numbers, and dots; remove everything else
             # return re.sub(r'[^a-zA-Z0-9.]', '', text)
             return re.sub(r'[^a-zA-Z0-9._]', '', text)
-        found = clean_string(text2)
-        print('>>found  :',found)  # Output: 12.2024
+        found = clean_string(text4)
+        if args.verbose:
+            print('>>found  :',found)  # Output: 12.2024
+        # remove leading and trailing "_"
+        found = found.strip('_')
+        if args.verbose:
+            print('>>found  :',found)
 
-        
         return found
     else:
         # print("No match found")
@@ -174,23 +202,33 @@ def make_sure_file_is_orcd(file_path):
     return is_orc, text
 
 
-def phrases_get():
+def get_yes_no_red():
+    return input("\x1b[0;37;31m"+"[??]      : >> [y]es / [n]o : "+"\33[0m")
+
+def phrases_get_empty():
     '''count how many of the phrases given below are contained in text.'''
     phrases = { 'APEMS_bill_L_J'  : { 'search'  : [ 'APEMS', 'Corminjoz', 'Prestations pour', 'Glensk', 'Laura','Jakob', 'Montant CHF', 'Factur' , 'Facturation' ],
                                         'get_all' : [{'Facturation': r'[0-9][0-9]\.(20[0-9][0-9]|[0-9][0-9])', 'replace': False}],
                                         'filename': 'Rechnung_<Facturation>_Jakob_und_Laura.pdf',
-                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/APEMS_Jakob_Laura/2025/',
+                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/Kinder_APEMS/2025/',
                                     },
                 'Sorbier_bill_S_E'   : { 'search'  : [ 'Sorbiers', 'Prestations pour', 'Glensk', 'Simon','Emil', 'Montant CHF', 'Factur' , 'Facturation' ],
                                         'get_all' : [{'Facturation': r'[0-9][0-9]\.(20[0-9][0-9]|[0-9][0-9])', 'replace': False}],
                                         'filename': 'Rechnung_<Facturation>_Simon_und_Emil.pdf',
-                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/Simon_Emil_Sorbier/2025/',
+                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/Kinder_Sorbier/2025/',
                                     },
-                'Sorbier_contrat_S_E'   : { 'search'  : [ 'Sorbiers', 'Contrat', 'Glensk','Emil','Signatures'],
-                                        'get_all' : [{'Contrat': r'.*du.*au.*', 'replace': False}],
-                                        'filename': 'Vertrag_<Contratt>_Simon_und_Emil.pdf',
-                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/Simon_Emil_Sorbier/2025/',
+                'Sorbier_contrat_S_E'   : { 'search'  : [ 'Sorbiers', 'Contrat', 'Glensk','Emil','Signatures','R.f'],
+                                        'get_all' : [{'Contrat': r'.*du.*au.*', 'replace': False}, {'R.f': r'^[rR].[Ff].*[0-9][0-9$]', 'replace': False} ],
+                                        'filename': 'Vertrag_<Contrat>_<R.f>_Simon_und_Emil.pdf',
+                                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/Kinder_Sorbier/2025/',
                                     },
+                'APEMS_contrat_J_L'   : { 'search'  : [ 'APEMS', 'Contrat','valable' 'Glensk','Laura','Jakob','Signatures','R.f'],
+                        'get_all' : [{'Contrat': r'^[Cc][Oo][Nn][tT][rR][Aa][tT].*', 'replace': False}, \
+                                     {'R.f': r'^[rR].[Ff].*[0-9][0-9$]', 'replace': False}, \
+                                     {'valable':r'^[Vv][Aa][Ll][Aa][Bb][Ll][Ee].*le.*au.*', 'replace': False}],
+                        'filename': 'Vertrag_<Contrat>_<valable>_<R.f>_Jakob_und_oder_Laura.pdf',
+                        'folder'  : '/Users/albert/Documents/Vertraege_Versicherungen/Kinder_APEMS/2025/',
+                    },
                                       
                 # 'APEMS_contract'    : {'search'   : [ 'APEMS', 'Corminjoz', 'Contrat' ],
                 #                        'get_all'  : [{}],
@@ -211,8 +249,8 @@ def phrases_get():
         phrases[key]['probability'] = 0
     return phrases
 
-def phrases_evaluate(text):
-    phrases = phrases_get()
+def phrases_evaluate(text,args):
+    phrases = phrases_get_empty()
     # print("> 1 > ",phrases)
     
     # get ist of all phrases that are in phrases
@@ -233,7 +271,8 @@ def phrases_evaluate(text):
         # key = APEMS_bill, APEMS_contract; 
         # values = {'count':9, 'found' = [...], 'get_all' = [..], 'probability'}
         # print(key.ljust(20),str(phrases[key]['probability']).ljust(3)+" %")
-        if phrases[key]['probability'] > 65:
+        # if phrases[key]['probability'] > 65:
+        if True:
             # print("key",key)
             get_all = phrases[key]['get_all']
             # go line by line through text using readlines
@@ -254,7 +293,8 @@ def phrases_evaluate(text):
                         # print(">>get_value  :",get_value)
                         
                         if re.search(get_key, line, re.IGNORECASE):
-                            if False: #True: #False:
+                            # if False: #True: #False:
+                            if args.verbose:
                                 print()
                                 print(">>line       :",line)
                                 print(">>get_all    :",get_all)
@@ -265,11 +305,16 @@ def phrases_evaluate(text):
                                 # line = 'Facturation 12.2024'
                                 # get_key = 'Facturation'
                                 # get out Month and Year
-                            found = extract_re_from_line(get_value,line)
+                            found = extract_re_from_line(get_value,line,args)
+                            if args.verbose:
+                                print('>> replacing??',found)
+                            
                             # sys.exit('33')
                             if found:
-                                # print('  >> found',found)
+                                if args.verbose:
+                                    print('>> replacing?',found)
                                 if item['replace'] == False:
+                                    printblue('>> replacing!',found)
                                     item['replace'] = found
                                     # print("phrases",phrases)
                                     # pprint.pprint(phrases)
@@ -323,93 +368,144 @@ def substitute_filename(filename, subst_what, subst_with):
 def move_file(source_path, destination_path):
     try:
         shutil.move(source_path, destination_path)
-        print(f"File moved from {source_path} to {destination_path}")
+        printgreen(f"File moved from {source_path} to {destination_path}")
     except FileNotFoundError:
         print(f"Error: Source file {source_path} not found")
     except Exception as e:
         print(f"Error: {e}")
         
 
-def process_pdfs(directory):
+def process_pdfs(directory,args):
     """Process all PDF files in a directory."""
-    list_of_ORCed_pdfs = []
-    for root, dirs, files in os.walk(directory):
-        for filename in files:
-            if filename.endswith('.pdf'):
-                file_path = os.path.join(root, filename)
-                is_orc, text = make_sure_file_is_orcd(file_path)
-                if not is_orc: sys.exit('not orcd')
-                phrases = phrases_evaluate(text)
-                bc = get_best_candidate(phrases)
-                print()
-                printgreen('best_candidate',bc[0].ljust(15),str(bc[1]).ljust(3),bc[2],file_path)
-                # if file_path == '/Users/albert/Documents/SwiftScan/SwiftScan_2025-06-15_13.16.52.pdf':
-                #     pprint.pprint(phrases)
-                #     sys.exit("asdfasd77777")
-                verbose = False
-                if bc[1] > 74:
-                    # pprint.pprint(phrases)
+    if args.file:
+        files_gothrough = [args.file]
+    else:
+        # print("1")
+        files_gothrough = []
+        for root, dirs, files in os.walk(directory):
+            for filename in files:
+                # print("filename",filename)
+                if filename.endswith('.pdf'):
+                    files_gothrough.append(os.path.join(root, filename))
+
+    # print("files_gothrough",files_gothrough)
+    # sys.exit()              
+    for file_path in files_gothrough:  
+        #######################
+        # make sure it is orc
+        ########################        
+        is_orc, text = make_sure_file_is_orcd(file_path)
+        if not is_orc: sys.exit('not orcd')
+        
+        ##################################
+        # go thorugh the lines of the text
+        ###################################
+        phrases = phrases_evaluate(text,args)
+        if args.verbose:
+            printblue('>>phrases:')
+            pprint.pprint(phrases)
+            print()
+        # sys.exit('asdfasd')
+        
+        bc = get_best_candidate(phrases)
+        print()
+        printgreen('best_candidate 786:',bc[0].ljust(15),str(bc[1]).ljust(3),bc[2],file_path)
+        # if file_path == '/Users/albert/Documents/SwiftScan/SwiftScan_2025-06-15_13.16.52.pdf':
+        #     pprint.pprint(phrases)
+        #     sys.exit("asdfasd77777")
+        verbose = False
+        verbose = True
+        if bc[1] > 49:
+            # pprint.pprint(phrases)
+            if verbose:
+                print("--")
+            getitem = phrases[bc[0]]
+            if verbose:
+                pprint.pprint(getitem)
+                print("--")
+                print('full:')
+                pprint.pprint(phrases)
+                
+            ########## make the filename
+            folder = getitem['folder']
+            if verbose:
+                print("?? folder",folder)
+            filename_to_substitute = getitem['filename']
+            if verbose:
+                print("?? filename_to_substitute",filename_to_substitute)
+            if not os.path.isdir(folder):
+                printgreen("Do you want to create the folder "+folder+" first?")
+                sys.exit('774')
+            get_all = getitem['get_all']
+            if verbose:
+                print("?? get_all",get_all)
+            for idx,item in enumerate(get_all):
+                if verbose:
+                    print()
+                    print("?? item",idx,item)
+                subst_what = False
+                subst_with = False
+                for key, value in item.items():
                     if verbose:
-                        print("--")
-                    getitem = phrases[bc[0]]
-                    if verbose:
-                        pprint.pprint(getitem)
-                    folder = getitem['folder']
-                    if verbose:
-                        print("?? folder",folder)
-                    filename_to_substitute = getitem['filename']
-                    if verbose:
-                        print("?? filename_to_substitute",filename_to_substitute)
-                    if not os.path.isdir(folder):
-                        printgreen("Do you want to create the folder "+folder+" first?")
-                        sys.exit('774')
-                    get_all = getitem['get_all']
-                    if verbose:
-                        print("?? get_all",get_all)
-                    for item in get_all:
-                        if verbose:
-                            print("?? item",item)
-                        subst_what = False
-                        subst_with = False
-                        for key, value in item.items():
-                            if verbose:
-                                #for key,value in getitem['get_all']: # get: {'Facturation': 'Facturation [0-9][0-9]\\.20[0-9][0-9]','replace': '12.2024'}
-                                print("?? 11 key",key)
-                                print("?? 11 value",value)
-                            if key == 'replace' and subst_with == False:
-                                subst_with = value
-                            elif key != 'replace' and subst_what == False:
-                                subst_what = key
-                        if verbose:
-                            print("?? 22 subst_what",subst_what)
-                            print("?? 22 subst_with",subst_with)
-                        print("??xx??",filename_to_substitute,subst_what,subst_with)
-                        filename_new = substitute_filename(filename_to_substitute, subst_what, subst_with)
-                        if verbose:
-                            print("?? filename_new",filename_new)  # Output: Rechnung_12.2024_Jakob_und_Laura.pdf
-                        # Grok: python; filename_to_substitute='Rechnung_<Facturation>_Jakob_und_Laura.pdf'; subst_what='Facturation';subst_with='12.2024';subst stands for substitute; can you write me a function in python that substitutes the <item> in filename_to_substitute from subst_what with the string in subst_with so that I get out filename_to_substitute_new='Rechnung_12.2024_Jakob_und_Laura.pdf';
-                        file_path_new = folder+'/'+filename_new
-                        if verbose:
-                            print("?? file_path_new",file_path_new)
-                        printred(' '*36,file_path,'->',file_path_new)
-                        pprint.pprint(phrases)
-                        
-                        sys.exit('a-0sd')
-                        if os.path.isfile(file_path_new):
-                            print('??file_path_new',file_path_new,'does already exist!')
-                            sys.exit("path does exist already!")
-                            
-                        move_file(file_path, file_path_new)
-                        
-                        # sys.exit("asdfasdf7888")
-                    # sys.exit('done')
-                    
-                # if file_path == '/Users/albert/Documents/SwiftScan/SwiftScan_2025-03-16_15.25.15.pdf':
-                #     sys.exit('00800i0i')
+                        #for key,value in getitem['get_all']: # get: {'Facturation': 'Facturation [0-9][0-9]\\.20[0-9][0-9]','replace': '12.2024'}
+                        print("?? 11 key",key)
+                        print("?? 11 value",value)
+                    if key == 'replace' and subst_with == False:
+                        subst_with = value
+                    elif key != 'replace' and subst_what == False:
+                        subst_what = key
+                if verbose:
+                    print("?? 22 subst_what",subst_what)
+                    print("?? 22 subst_with",subst_with)
+                    print("?? 33 ==>",filename_to_substitute,subst_what,subst_with)
+                filename_to_substitute = substitute_filename(filename_to_substitute, subst_what, subst_with)
+                if verbose:
+                    print("?? 44 ==> filename_to_substitute:", filename_to_substitute) 
+                    print()
+
+            filename_new = filename_to_substitute # substitute_filename(filename_to_substitute, subst_what, subst_with)
+            if verbose:
+                print("?? filename_new",filename_new)  # Output: Rechnung_12.2024_Jakob_und_Laura.pdf
+            # Grok: python; filename_to_substitute='Rechnung_<Facturation>_Jakob_und_Laura.pdf'; subst_what='Facturation';subst_with='12.2024';subst stands for substitute; can you write me a function in python that substitutes the <item> in filename_to_substitute from subst_what with the string in subst_with so that I get out filename_to_substitute_new='Rechnung_12.2024_Jakob_und_Laura.pdf';
+            file_path_new = folder+'/'+filename_new
+            if verbose:
+                print("?? file_path_new",file_path_new)
+            printred(' '*36,file_path,'->',file_path_new)
+            if '<' in file_path_new or '>' in file_path_new:
+                pprint.pprint(phrases)
+                sys.exit("?? file_path_new contains '< >'")
+            # pprint.pprint(phrases)
             
-    # sys.exit("get this right first")
+            # sys.exit('==> should I move it? a-0sd')
+            if bc[1] >= 98:
+                answer = 'y'
+            elif bc[1] >= 50:
+                answer = get_yes_no_red()
+            else:
+                printred('Skipping file', file_path, 'because probability is too low:', bc[1])
+                continue
+            
+            if answer.lower() in ['y', 'yes', 'j', 'ja']:
+                printgreen('Moving file to', file_path_new)
+                if os.path.isfile(file_path_new):
+                    print('??file_path_new',file_path_new,'does already exist!')
+                    sys.exit("path does exist already!")
                     
+                move_file(file_path, file_path_new)
+            else:
+                printred('Skipping file', file_path)
+                continue
+                
+                # sys.exit("asdfasdf7888")
+            # sys.exit('done')
+            
+        # if file_path == '/Users/albert/Documents/SwiftScan/SwiftScan_2025-03-16_15.25.15.pdf':
+        #     sys.exit('00800i0i')
+    
+# sys.exit("get this right first")
+                
 
 if __name__ == "__main__":
-    process_pdfs('/Users/albert/Documents/SwiftScan')
-    # job
+    p = help()
+    args = p.parse_args()
+    process_pdfs('/Users/albert/Documents/SwiftScan',args=args)
